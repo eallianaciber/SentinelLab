@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Informe de Investigación – Ciberseguridad</title>
+
+<style>
+body {
+  font-family: Consolas, monospace;
+  background: #0b0b0b;
+  color: #00ff9c;
+  margin: 20px;
+}
+form {
+  background: #111;
+  padding: 20px;
+  max-width: 950px;
+  margin: auto;
+  border-radius: 8px;
+}
+h2, h3 {
+  border-bottom: 1px solid #00ff9c;
+  padding-bottom: 5px;
+}
+label {
+  display: block;
+  margin-top: 10px;
+  font-weight: bold;
+}
+input, textarea {
+  width: 100%;
+  padding: 6px;
+  margin-top: 5px;
+}
+textarea {
+  resize: vertical;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 10px;
+}
+th, td {
+  border: 1px solid #00ff9c;
+  padding: 6px;
+}
+button {
+  margin-top: 10px;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+.small {
+  font-size: 12px;
+  opacity: 0.8;
+}
+</style>
+
+<script>
+/* ================= VALIDACIONES ================= */
+
+function validarIPv4(ip) {
+  return /^(\d{1,3}\.){3}\d{1,3}$/.test(ip);
+}
+function validarIPv6(ip) {
+  return /^[0-9a-fA-F:]+$/.test(ip);
+}
+function validarDominio(d) {
+  return /^[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(d);
+}
+function validarMAC(mac) {
+  return /^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$/.test(mac);
+}
+function validarFechaSOC(f) {
+  return /^\d{2}\d{4}[A-Z]{3}\d{2}$/.test(f);
+}
+
+/* ================= IPs DINÁMICAS ================= */
+
+function agregarIP() {
+  const tbody = document.getElementById("body_destino");
+  const tr = document.createElement("tr");
+  tr.innerHTML = `
+    <td><input type="text" name="ip_destino[]" placeholder="8.8.8.8 / dominio"></td>
+    <td>
+      <button type="button" onclick="analizarIP(this)">🔍</button>
+      <button type="button" onclick="eliminarFila(this)">🗑</button>
+    </td>
+  `;
+  tbody.appendChild(tr);
+}
+
+function eliminarFila(btn) {
+  btn.closest("tr").remove();
+}
+
+/* ================= ANALISIS BACKEND ================= */
+
+async function analizarIP(btn) {
+  const input = btn.closest("tr").querySelector("input");
+  const artifact = input.value.trim();
+
+  if (!validarIPv4(artifact) && !validarIPv6(artifact) && !validarDominio(artifact)) {
+    alert("IP o dominio inválido");
+    return;
+  }
+
+  const panel = document.getElementById("resultado_analisis");
+  panel.innerHTML = "⏳ Analizando artefacto…";
+
+  try {
+    const res = await fetch("/analizar", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ artifact })
+    });
+
+    const data = await res.json();
+    renderResultados(data);
+
+  } catch (e) {
+    panel.innerHTML = "❌ Error al comunicarse con el backend";
+  }
+}
+
+function renderResultados(data) {
+  const panel = document.getElementById("resultado_analisis");
+
+  let html = `<h3>Resultado de análisis: ${data.artifact}</h3>`;
+  html += `<div class="small">Modo backend: ${data.mode}</div>`;
+
+  html += `
+  <table>
+    <tr>
+      <th>Fuente</th>
+      <th>Severidad</th>
+      <th>Detalle</th>
+      <th>Referencia</th>
+    </tr>
+  `;
+
+  data.results.forEach(r => {
+    html += `
+      <tr>
+        <td>${r.engine}</td>
+        <td>${r.severity || "N/A"}</td>
+        <td>
+          ${r.malicious !== undefined ? "Malicious: " + r.malicious : ""}
+          ${r.score !== undefined ? "Score: " + r.score : ""}
+          ${r.error ? "Error: " + r.error : ""}
+        </td>
+        <td>
+          ${r.link ? `<a href="${r.link}" target="_blank">Ver</a>` : "-"}
+        </td>
+      </tr>
+    `;
+  });
+
+  html += "</table>";
+  panel.innerHTML = html;
+}
+
+/* ================= AUTOMATIZACIONES ================= */
+
+function autocompletarIP() {
+  document.getElementById("ip_equipo").value =
+    document.getElementById("ip_origen").value;
+}
+
+function aplicarDefaults() {
+  document.querySelectorAll("input, textarea").forEach(el => {
+    if (!el.value.trim()) el.value = "---";
+  });
+
+  const mac = document.getElementById("mac").value;
+  if (mac !== "---" && !validarMAC(mac)) {
+    alert("MAC inválida");
+    return false;
+  }
+
+  const fecha = document.getElementById("fecha_contacto").value;
+  if (fecha !== "---" && !validarFechaSOC(fecha)) {
+    alert("Formato fecha inválido (DDHHHHMMMYY)");
+    return false;
+  }
+  return true;
+}
+</script>
+</head>
+
+<body>
+
+<form method="POST" action="/guardar" onsubmit="return aplicarDefaults()">
+
+<h2>1. TÍTULO DEL CASO</h2>
+<input type="text" name="titulo" maxlength="120" required>
+
+<h2>2. IPs</h2>
+
+<label>IP Origen</label>
+<input type="text" id="ip_origen" name="ip_origen" onblur="autocompletarIP()">
+
+<table>
+<thead>
+<tr><th>IP / Dominio Destino</th><th>Acción</th></tr>
+</thead>
+<tbody id="body_destino">
+<tr>
+<td><input type="text" name="ip_destino[]"></td>
+<td>
+<button type="button" onclick="analizarIP(this)">🔍</button>
+<button type="button" onclick="eliminarFila(this)">🗑</button>
+</td>
+</tr>
+</tbody>
+</table>
+
+<button type="button" onclick="agregarIP()">➕ Agregar IP</button>
+
+<div id="resultado_analisis"></div>
+
+<h2>3. DESCRIPCIÓN</h2>
+<textarea name="descripcion" rows="5" maxlength="3000"></textarea>
+
+<h2>4. DATOS DEL EQUIPO</h2>
+
+<input type="text" name="unidad" placeholder="Unidad">
+<input type="text" name="equipo" placeholder="Equipo / Host">
+
+<label>Sistema Operativo</label>
+<label><input type="checkbox" name="so[]" value="Windows XP/7/8"> Windows XP/7/8</label>
+<label><input type="checkbox" name="so[]" value="Windows 10"> Windows 10</label>
+<label><input type="checkbox" name="so[]" value="Windows 11"> Windows 11</label>
+<label><input type="checkbox" name="so[]" value="Linux"> Linux</label>
+<label><input type="checkbox" name="so[]" value="macOS"> macOS</label>
+<label><input type="checkbox" name="so[]" value="Android"> Android</label>
+
+<input type="text" id="ip_equipo" name="ip_equipo" placeholder="IP del equipo">
+<input type="text" id="mac" name="mac" placeholder="AA:BB:CC:DD:EE:FF">
+<input type="text" name="usuario" placeholder="Usuario">
+<input type="text" name="firewall" placeholder="Firewall">
+<input type="text" name="antimalware" placeholder="Antimalware">
+
+<h2>5. ACCIÓN CORRECTIVA</h2>
+<textarea name="accion_correctiva" rows="4"></textarea>
+
+<h2>6. CONTACTO</h2>
+
+<input type="text" name="resp_informatico" placeholder="Responsable Informático">
+<input type="email" name="email" placeholder="Email">
+<input type="text" name="cel" placeholder="Celular">
+<input type="text" name="interno" placeholder="Interno">
+<input type="text" id="fecha_contacto" name="fecha_contacto" placeholder="051130FEB26">
+<textarea name="comunicacion_realizada" rows="3" placeholder="Comunicación"></textarea>
+
+<h2>7. CONCLUSIÓN</h2>
+<textarea name="conclusion" rows="3" maxlength="500"></textarea>
+
+<br>
+<button type="submit">Guardar Informe</button>
+<button type="reset">Reiniciar</button>
+
+</form>
+
+</body>
+</html>
