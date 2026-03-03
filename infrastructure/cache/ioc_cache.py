@@ -268,7 +268,7 @@ class IOCCacheManager:
             return 0
 
 
-# Decorador para cachear automáticamente resultados de analyzers
+# Decorador para cachear automáticamente resultados de analyzers - VERSIÓN CORREGIDA
 def cached(ttl_override: Optional[int] = None):
     """
     Decorador para cachear automáticamente resultados de funciones de análisis
@@ -282,18 +282,18 @@ def cached(ttl_override: Optional[int] = None):
             source = self.__class__.__name__.lower().replace('analyzer', '')
             
             # Usar TTL override si se proporciona
+            original_ttl = None
             if ttl_override:
                 original_ttl = cache_manager.ttl
                 cache_manager.set_ttl(ttl_override)
             
             try:
-                # Usar get_or_analyze
+                # Usar get_or_analyze - CORREGIDO: eliminar duplicación de value
                 result = cache_manager.get_or_analyze(
                     value=value,
                     source=source,
                     analyzer_func=func,
-                    self=self,
-                    value=value,
+                    self=self,  # Pasar self como argumento posicional
                     *args,
                     **kwargs
                 )
@@ -302,7 +302,7 @@ def cached(ttl_override: Optional[int] = None):
                 
             finally:
                 # Restaurar TTL original si se modificó
-                if ttl_override:
+                if original_ttl is not None:
                     cache_manager.set_ttl(original_ttl)
                     
         return wrapper
